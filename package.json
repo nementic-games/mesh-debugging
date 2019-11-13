@@ -1,0 +1,19 @@
+{
+  "name": "com.nementic.mesh-debugging",
+  "version": "1.0.0",
+  "displayName": "Mesh Debugging",
+  "description": "A suite of utilities useful for finding issues or simply visualizing properties such as UVs or normals of a mesh.",
+  "unity": "2019.1",
+  "keywords": [
+    "Nementic",
+    "Mesh",
+    "Utility",
+    "Debugger"
+  ],
+  "author": {
+    "name": "Nementic Games GmbH",
+    "email": "mail@nementic.games",
+    "url": "http://www.nementic.games"
+  },
+  "type": "tool"
+}
