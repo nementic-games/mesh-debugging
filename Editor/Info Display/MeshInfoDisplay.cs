@@ -110,6 +110,8 @@ namespace Nementic.MeshDebugging
                 EditorGUILayout.LabelField("UV3: " + mesh.uv3.Length);
                 EditorGUILayout.LabelField("UV4: " + mesh.uv4.Length);
                 EditorGUILayout.LabelField("Colors: " + mesh.colors.Length);
+                EditorGUILayout.LabelField("Tangents: " + mesh.tangents.Length);
+                EditorGUILayout.LabelField("Bounds: " + mesh.bounds);
             }
         }
 
