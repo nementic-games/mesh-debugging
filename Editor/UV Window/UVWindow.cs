@@ -185,6 +185,8 @@ namespace Nementic.MeshDebugging
             Repaint();
         }
 
+        private Material previewMaterial;
+
         private Mesh FindMesh()
         {
             if (Selection.activeObject is Mesh mesh)
@@ -196,10 +198,25 @@ namespace Nementic.MeshDebugging
             {
                 var meshFilter = gameObject.GetComponentInChildren<MeshFilter>();
 
-                if (meshFilter == null)
-                    return null;
+                if (meshFilter != null)
+                {
+                    var renderer = meshFilter.GetComponent<Renderer>();
+                    if (renderer != null)
+                        previewMaterial = renderer.sharedMaterial;
 
-                return meshFilter.sharedMesh;
+                    return meshFilter.sharedMesh;
+                }
+                else
+                {
+                    var skinnedMeshRenderer = gameObject.GetComponentInChildren<SkinnedMeshRenderer>();
+                    if (skinnedMeshRenderer != null)
+                    {
+                        if (skinnedMeshRenderer != null)
+                            previewMaterial = skinnedMeshRenderer.sharedMaterial;
+
+                        return skinnedMeshRenderer.sharedMesh;
+                    }
+                }
             }
 
             return null;
@@ -222,6 +239,19 @@ namespace Nementic.MeshDebugging
 
             if (triangleBuffer.Count == 0)
                 return;
+
+            if (previewMaterial != null && previewMaterial.mainTexture != null)
+            {
+                // TODO: texture offset and tiling is not correctly handled yet.
+                // Also it seems that the uvs are also flipped on the x axis.
+                Vector2 texturePosition = position;
+                texturePosition.y -= 1 * scale;
+                texturePosition += previewMaterial.mainTextureOffset * scale;
+                Vector2 textureScale = new Vector2(1, 1) * scale / previewMaterial.mainTextureScale;
+
+                Rect rect = new Rect(texturePosition, textureScale);
+                EditorGUI.DrawPreviewTexture(rect, previewMaterial.mainTexture);
+            }
 
             position.y = -position.y;
 
