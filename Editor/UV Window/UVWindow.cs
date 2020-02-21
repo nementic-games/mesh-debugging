@@ -23,12 +23,27 @@ namespace Nementic.MeshDebugging
         [SerializeField]
         private float zoom = 1f;
 
+        [SerializeField]
+        private UVChannel uvChannel = UVChannel.UV0;
+
         private GUIStyle toolbarButtonStyle;
         private static readonly float zoomSpeed = 0.1f;
         private static readonly float minZoom = 0.5f;
         private static readonly float maxZoom = 10f;
         private readonly List<Vector2> uvBuffer = new List<Vector2>(64);
         private readonly List<int> triangleBuffer = new List<int>(32);
+
+        private enum UVChannel
+        {
+            UV0,
+            UV1,
+            UV2,
+            UV3,
+            UV4,
+            UV5,
+            UV6,
+            UV7,
+        }
 
         private void OnEnable()
         {
@@ -44,8 +59,8 @@ namespace Nementic.MeshDebugging
         {
             Mesh mesh = FindMesh();
 
-            Rect toolbarRect = new Rect(0, -1, position.width, 16);
-            Toolbar(toolbarRect, mesh != null ? mesh.name : string.Empty);
+            Rect toolbarRect = new Rect(0, -1, position.width, EditorGUIUtility.singleLineHeight);
+            Toolbar(toolbarRect, mesh);
 
             float unitPixelSize = 300f;
             HandlesMouseEvents(new Vector2(0f, -toolbarRect.height), unitPixelSize);
@@ -54,20 +69,42 @@ namespace Nementic.MeshDebugging
             GraphArea(graphWindowRect, unitPixelSize, mesh);
         }
 
-        private void Toolbar(Rect toolbarRect, string label)
+        private void Toolbar(Rect toolbarRect, Mesh mesh)
         {
-            GUI.Box(toolbarRect, GUIContent.none, EditorStyles.toolbar);
+            string label = mesh != null ? mesh.name : string.Empty;
+            GUILayout.BeginArea(toolbarRect, EditorStyles.toolbar);
+            GUILayout.BeginHorizontal();
 
-            GUI.Label(toolbarRect, label, EditorStyles.centeredGreyMiniLabel);
+            GUILayout.FlexibleSpace();
 
-            Rect buttonRect = toolbarRect;
-            buttonRect.xMin = buttonRect.xMax - 65f;
-            buttonRect.xMax -= 8;
+            GUILayout.Label(label, EditorStyles.centeredGreyMiniLabel);
+
+            GUILayout.FlexibleSpace();
 
             InitializeStyles();
 
-            if (GUI.Button(buttonRect, "Recenter", toolbarButtonStyle))
+            if (GUILayout.Button("Recenter", toolbarButtonStyle, GUILayout.Width(70)))
                 ResetView();
+
+            EditorGUI.BeginChangeCheck();
+            uvChannel = (UVChannel)EditorGUILayout.EnumPopup(uvChannel, EditorStyles.toolbarDropDown, GUILayout.Width(50));
+            if (EditorGUI.EndChangeCheck())
+            {
+                if (mesh != null)
+                {
+                    mesh.GetUVs((int)uvChannel, uvBuffer);
+
+                    if (uvBuffer.Count == 0)
+                        base.ShowNotification(new GUIContent($"No {uvChannel.ToString()} found."));
+                    else
+                        base.RemoveNotification();
+                }
+            }
+
+            GUILayout.Space(4);
+
+            GUILayout.EndHorizontal();
+            GUILayout.EndArea();
         }
 
         private void GraphArea(Rect graphWindowRect, float unitPixelSize, Mesh mesh)
@@ -176,7 +213,7 @@ namespace Nementic.MeshDebugging
             if (mesh.vertexCount == 0)
                 return;
 
-            mesh.GetUVs(0, uvBuffer);
+            mesh.GetUVs((int)uvChannel, uvBuffer);
 
             if (uvBuffer.Count == 0)
                 return;
