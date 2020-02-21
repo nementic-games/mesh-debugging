@@ -242,12 +242,14 @@ namespace Nementic.MeshDebugging
 
             if (previewMaterial != null && previewMaterial.mainTexture != null)
             {
-                // TODO: texture offset and tiling is not correctly handled yet.
-                // Also it seems that the uvs are also flipped on the x axis.
+                Vector2 textureOffset = previewMaterial.mainTextureOffset;
+                Vector2 textureScale = previewMaterial.mainTextureScale;
                 Vector2 texturePosition = position;
-                texturePosition.y -= 1 * scale;
-                texturePosition += previewMaterial.mainTextureOffset * scale;
-                Vector2 textureScale = new Vector2(1, 1) * scale / previewMaterial.mainTextureScale;
+
+                texturePosition -= new Vector2(textureOffset.x, textureOffset.y) * scale / new Vector2(textureScale.x, -textureScale.y);
+                texturePosition.y -= 1f / textureScale.y * scale;
+
+                textureScale = new Vector2(scale, scale) / textureScale;
 
                 Rect rect = new Rect(texturePosition, textureScale);
                 EditorGUI.DrawPreviewTexture(rect, previewMaterial.mainTexture);
