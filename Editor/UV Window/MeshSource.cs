@@ -65,6 +65,7 @@ namespace Nementic.MeshDebugging
         {
             this.mesh = null;
             this.previewMaterial = null;
+            this.gameObject = null;
 
             switch (mode)
             {

@@ -29,6 +29,7 @@ namespace Nementic.MeshDebugging
         private float zoom = 1f;
         private readonly float unitPixelSize = 300f;
         private UVChannel uvChannel = UVChannel.UV0;
+        private int materialChannel = 0;
 
         private GUIStyle toolbarButtonStyle;
         private static readonly float zoomSpeed = 0.1f;
@@ -86,6 +87,8 @@ namespace Nementic.MeshDebugging
 
             if (GUILayout.Button("Recenter", toolbarButtonStyle, GUILayout.Width(70)))
                 ResetView();
+
+            materialChannel = GUILayout.Toggle(materialChannel == 0, "Texture", EditorStyles.toolbarButton) ? 0 : -1;
 
             EditorGUI.BeginChangeCheck();
             uvChannel = (UVChannel)EditorGUILayout.EnumPopup(uvChannel, EditorStyles.toolbarDropDown, GUILayout.Width(50));
@@ -209,7 +212,7 @@ namespace Nementic.MeshDebugging
                 return;
 
             // TODO: Ensure preview is drawn behind labels.
-            if (this.mesh.HasPreviewMaterial && this.mesh.PreviewMaterial.mainTexture != null)
+            if (this.materialChannel == 0 && this.mesh.HasPreviewMaterial && this.mesh.PreviewMaterial.mainTexture != null)
             {
                 Vector2 textureOffset = this.mesh.PreviewMaterial.mainTextureOffset;
                 Vector2 textureScale = this.mesh.PreviewMaterial.mainTextureScale;
