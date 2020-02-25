@@ -11,19 +11,27 @@ namespace Nementic.MeshDebugging
     public class UVWindow : EditorWindow
     {
         [MenuItem("Nementic/Mesh Debugging/UV Window")]
-        public static void ShowWindow()
+        public static UVWindow GetWindow()
         {
             var window = GetWindow<UVWindow>("UV Window");
             window.origin = window.position.size * 0.5f;
+            return window;
         }
 
-        [SerializeField]
+        public Mesh Mesh
+        {
+            get => mesh;
+            set
+            {
+                mesh = value;
+                Repaint();
+            }
+        }
+
+        private Mesh mesh;
+
         private Vector2 origin;
-
-        [SerializeField]
         private float zoom = 1f;
-
-        [SerializeField]
         private UVChannel uvChannel = UVChannel.UV0;
 
         private GUIStyle toolbarButtonStyle;
@@ -189,6 +197,9 @@ namespace Nementic.MeshDebugging
 
         private Mesh FindMesh()
         {
+            if (this.Mesh != null)
+                return this.Mesh;
+
             if (Selection.activeObject is Mesh mesh)
                 return mesh;
 
