@@ -20,18 +20,14 @@ namespace Nementic.MeshDebugging
 
         public Mesh Mesh
         {
-            get => mesh;
-            set
-            {
-                mesh = value;
-                Repaint();
-            }
+            set => mesh.Mesh = value;
         }
 
-        private Mesh mesh;
+        private MeshSource mesh;
 
         private Vector2 origin;
         private float zoom = 1f;
+        private readonly float unitPixelSize = 300f;
         private UVChannel uvChannel = UVChannel.UV0;
 
         private GUIStyle toolbarButtonStyle;
@@ -56,37 +52,34 @@ namespace Nementic.MeshDebugging
         private void OnEnable()
         {
             base.wantsMouseMove = true;
+
+            if (mesh == null)
+                mesh = new MeshSource(this);
         }
 
         private void OnSelectionChange()
         {
+            mesh.Refresh();
             Repaint();
         }
 
         private void OnGUI()
         {
-            Mesh mesh = FindMesh();
-
             Rect toolbarRect = new Rect(0, -1, position.width, EditorGUIUtility.singleLineHeight);
             Toolbar(toolbarRect, mesh);
 
-            float unitPixelSize = 300f;
             HandlesMouseEvents(new Vector2(0f, -toolbarRect.height), unitPixelSize);
 
             Rect graphWindowRect = new Rect(0, toolbarRect.yMax + 2, position.width, position.height - toolbarRect.height - 2);
             GraphArea(graphWindowRect, unitPixelSize, mesh);
         }
 
-        private void Toolbar(Rect toolbarRect, Mesh mesh)
+        private void Toolbar(Rect toolbarRect, MeshSource meshSource)
         {
-            string label = mesh != null ? mesh.name : string.Empty;
             GUILayout.BeginArea(toolbarRect, EditorStyles.toolbar);
             GUILayout.BeginHorizontal();
 
-            GUILayout.FlexibleSpace();
-
-            GUILayout.Label(label, EditorStyles.centeredGreyMiniLabel);
-
+            meshSource.DrawOptionPicker();
             GUILayout.FlexibleSpace();
 
             InitializeStyles();
@@ -98,9 +91,9 @@ namespace Nementic.MeshDebugging
             uvChannel = (UVChannel)EditorGUILayout.EnumPopup(uvChannel, EditorStyles.toolbarDropDown, GUILayout.Width(50));
             if (EditorGUI.EndChangeCheck())
             {
-                if (mesh != null)
+                if (meshSource != null)
                 {
-                    mesh.GetUVs((int)uvChannel, uvBuffer);
+                    meshSource.Mesh.GetUVs((int)uvChannel, uvBuffer);
 
                     if (uvBuffer.Count == 0)
                         base.ShowNotification(new GUIContent($"No {uvChannel.ToString()} found."));
@@ -188,49 +181,13 @@ namespace Nementic.MeshDebugging
 
         private void ResetView()
         {
-            origin = base.position.size * 0.5f;
+            // UV maps usually cover the range [0..1], so reset to the center
+            // of the first quadrant instead of the graph origin.
+            Vector2 graphOrigin = base.position.size * 0.5f;
+            Vector2 quadrantSize = new Vector2(0.5f, -0.5f) * unitPixelSize;
+            origin = graphOrigin - quadrantSize;
             zoom = 1f;
             Repaint();
-        }
-
-        private Material previewMaterial;
-
-        private Mesh FindMesh()
-        {
-            if (this.Mesh != null)
-                return this.Mesh;
-
-            if (Selection.activeObject is Mesh mesh)
-                return mesh;
-
-            GameObject gameObject = Selection.activeGameObject;
-
-            if (gameObject != null)
-            {
-                var meshFilter = gameObject.GetComponentInChildren<MeshFilter>();
-
-                if (meshFilter != null)
-                {
-                    var renderer = meshFilter.GetComponent<Renderer>();
-                    if (renderer != null)
-                        previewMaterial = renderer.sharedMaterial;
-
-                    return meshFilter.sharedMesh;
-                }
-                else
-                {
-                    var skinnedMeshRenderer = gameObject.GetComponentInChildren<SkinnedMeshRenderer>();
-                    if (skinnedMeshRenderer != null)
-                    {
-                        if (skinnedMeshRenderer != null)
-                            previewMaterial = skinnedMeshRenderer.sharedMaterial;
-
-                        return skinnedMeshRenderer.sharedMesh;
-                    }
-                }
-            }
-
-            return null;
         }
 
         private void DrawUVs(Mesh mesh, Vector2 position, float scale)
@@ -251,10 +208,11 @@ namespace Nementic.MeshDebugging
             if (triangleBuffer.Count == 0)
                 return;
 
-            if (previewMaterial != null && previewMaterial.mainTexture != null)
+            // TODO: Ensure preview is drawn behind labels.
+            if (this.mesh.HasPreviewMaterial && this.mesh.PreviewMaterial.mainTexture != null)
             {
-                Vector2 textureOffset = previewMaterial.mainTextureOffset;
-                Vector2 textureScale = previewMaterial.mainTextureScale;
+                Vector2 textureOffset = this.mesh.PreviewMaterial.mainTextureOffset;
+                Vector2 textureScale = this.mesh.PreviewMaterial.mainTextureScale;
                 Vector2 texturePosition = position;
 
                 texturePosition -= new Vector2(textureOffset.x, textureOffset.y) * scale / new Vector2(textureScale.x, -textureScale.y);
@@ -263,7 +221,7 @@ namespace Nementic.MeshDebugging
                 textureScale = new Vector2(scale, scale) / textureScale;
 
                 Rect rect = new Rect(texturePosition, textureScale);
-                EditorGUI.DrawPreviewTexture(rect, previewMaterial.mainTexture);
+                EditorGUI.DrawPreviewTexture(rect, this.mesh.PreviewMaterial.mainTexture);
             }
 
             position.y = -position.y;
