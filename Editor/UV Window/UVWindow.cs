@@ -34,7 +34,7 @@ namespace Nementic.MeshDebugging
 		private float textureAlpha = 1f;
 		private int textureColorChannel = 0;
 		private string[] colorChannelLabels = new string[] { "RGB", "R", "G", "B" };
-		private ColorWriteMask colorWriteMask;
+		private ColorWriteMask colorWriteMask = ColorWriteMask.All;
 		private Material previewMaterial;
 		private bool showOptions;
 
@@ -66,9 +66,9 @@ namespace Nementic.MeshDebugging
 
 			if (previewMaterial == null)
 			{
-				// TODO: Find or create shader that supports separate alpha slider.
-				Shader shader = (Shader)EditorGUIUtility.LoadRequired("Previews/PreviewTransparent.shader");
+				Shader shader = AssetDatabase.LoadAssetAtPath<Shader>("Packages/com.nementic.mesh-debugging/Editor/UV Window/UV-Preview.shader");
 				previewMaterial = new Material(shader);
+				Selection.activeObject = previewMaterial;
 				previewMaterial.hideFlags = HideFlags.HideAndDontSave;
 			}
 		}
@@ -138,7 +138,11 @@ namespace Nementic.MeshDebugging
 			EditorGUIUtility.labelWidth = 105;
 
 			materialChannel = EditorGUILayout.Toggle("Show Texture", materialChannel == 0) ? 0 : -1;
+
+			EditorGUI.BeginChangeCheck();
 			textureAlpha = EditorGUILayout.Slider("Texture Alpha", textureAlpha, 0f, 1f);
+			if (EditorGUI.EndChangeCheck())
+				previewMaterial.SetFloat("_Alpha", textureAlpha);
 
 			EditorGUILayout.BeginHorizontal();
 			EditorGUILayout.PrefixLabel("Color Channels");
@@ -297,6 +301,7 @@ namespace Nementic.MeshDebugging
 				textureScale = new Vector2(scale, scale) / textureScale;
 
 				Rect rect = new Rect(texturePosition, textureScale);
+				previewMaterial.SetInt("_ColorWriteMask", (int)colorWriteMask);
 				EditorGUI.DrawPreviewTexture(rect, this.meshSource.PreviewMaterial.mainTexture, previewMaterial, ScaleMode.StretchToFill, 0f, 0f, colorWriteMask);
 			}
 
