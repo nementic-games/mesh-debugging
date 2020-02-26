@@ -4,10 +4,10 @@
 #if UNITY_EDITOR
 namespace Nementic.MeshDebugging
 {
-	using System;
 	using System.Collections.Generic;
 	using UnityEditor;
 	using UnityEngine;
+	using UnityEngine.Rendering;
 
 	public class UVWindow : EditorWindow
 	{
@@ -31,6 +31,11 @@ namespace Nementic.MeshDebugging
 		private readonly float unitPixelSize = 300f;
 		private UVChannel uvChannel = UVChannel.UV0;
 		private int materialChannel = 0;
+		private float textureAlpha = 1f;
+		private int textureColorChannel = 0;
+		private string[] colorChannelLabels = new string[] { "RGB", "R", "G", "B" };
+		private ColorWriteMask colorWriteMask;
+		private Material previewMaterial;
 		private bool showOptions;
 
 		private GUIStyle toolbarButtonStyle;
@@ -58,6 +63,23 @@ namespace Nementic.MeshDebugging
 
 			if (meshSource == null)
 				meshSource = new MeshSource(this);
+
+			if (previewMaterial == null)
+			{
+				// TODO: Find or create shader that supports separate alpha slider.
+				Shader shader = (Shader)EditorGUIUtility.LoadRequired("Previews/PreviewTransparent.shader");
+				previewMaterial = new Material(shader);
+				previewMaterial.hideFlags = HideFlags.HideAndDontSave;
+			}
+		}
+
+		private void OnDisable()
+		{
+			if (previewMaterial != null)
+			{
+				Object.DestroyImmediate(previewMaterial);
+				previewMaterial = null;
+			}
 		}
 
 		private void OnSelectionChange()
@@ -71,19 +93,18 @@ namespace Nementic.MeshDebugging
 			Rect toolbarRect = new Rect(0, -1, position.width, EditorGUIUtility.singleLineHeight);
 			Toolbar(toolbarRect, meshSource);
 
-			HandlesMouseEvents(new Vector2(0f, -toolbarRect.height), unitPixelSize);
-
 			Rect graphWindowRect = new Rect(0, toolbarRect.yMax + 2, position.width, position.height - toolbarRect.height - 2);
 
 			if (showOptions)
 			{
-				const float optionsWidth = 200;
+				const float optionsWidth = 230;
 				graphWindowRect.xMax -= optionsWidth;
 
 				Rect optionsRect = new Rect(graphWindowRect.xMax, graphWindowRect.yMin, optionsWidth, graphWindowRect.height);
 				DrawOptionsPanel(optionsRect);
 			}
 
+			HandlesMouseEvents(new Vector2(0f, -toolbarRect.height), unitPixelSize, graphWindowRect);
 			GraphArea(graphWindowRect, unitPixelSize, meshSource);
 		}
 
@@ -114,9 +135,27 @@ namespace Nementic.MeshDebugging
 			GUILayout.BeginArea(rect);
 
 			float labelWidth = EditorGUIUtility.labelWidth;
-			EditorGUIUtility.labelWidth = 100;
+			EditorGUIUtility.labelWidth = 105;
 
 			materialChannel = EditorGUILayout.Toggle("Show Texture", materialChannel == 0) ? 0 : -1;
+			textureAlpha = EditorGUILayout.Slider("Texture Alpha", textureAlpha, 0f, 1f);
+
+			EditorGUILayout.BeginHorizontal();
+			EditorGUILayout.PrefixLabel("Color Channels");
+			EditorGUI.BeginChangeCheck();
+			textureColorChannel = GUILayout.Toolbar(textureColorChannel, colorChannelLabels, GUI.skin.button, GUI.ToolbarButtonSize.FitToContents);
+			if (EditorGUI.EndChangeCheck())
+			{
+				colorWriteMask = ColorWriteMask.All;
+				if (textureColorChannel == 1)
+					colorWriteMask = (ColorWriteMask.Alpha | ColorWriteMask.Red);
+				else if (textureColorChannel == 2)
+					colorWriteMask = (ColorWriteMask.Alpha | ColorWriteMask.Green);
+				else if (textureColorChannel == 3)
+					colorWriteMask = (ColorWriteMask.Alpha | ColorWriteMask.Blue);
+			}
+
+			EditorGUILayout.EndHorizontal();
 
 			EditorGUI.BeginChangeCheck();
 			uvChannel = (UVChannel)EditorGUILayout.EnumPopup("UV Channel", uvChannel);
@@ -172,11 +211,19 @@ namespace Nementic.MeshDebugging
 			}
 		}
 
-		private void HandlesMouseEvents(Vector2 mouseCorrection, float unitPixelSize)
+		private bool validDragStarted = false;
+
+		private void HandlesMouseEvents(Vector2 mouseCorrection, float unitPixelSize, Rect graphWindowRect)
 		{
 			Event current = Event.current;
 
-			if (current.type == EventType.MouseDrag && current.button != -1)
+			if (current.type == EventType.MouseDown && graphWindowRect.Contains(current.mousePosition))
+				validDragStarted = true;
+
+			if (current.type == EventType.MouseUp)
+				validDragStarted = false;
+
+			if (validDragStarted && current.type == EventType.MouseDrag && current.button != -1)
 			{
 				origin += current.delta;
 				current.Use();
@@ -250,7 +297,7 @@ namespace Nementic.MeshDebugging
 				textureScale = new Vector2(scale, scale) / textureScale;
 
 				Rect rect = new Rect(texturePosition, textureScale);
-				EditorGUI.DrawPreviewTexture(rect, this.meshSource.PreviewMaterial.mainTexture);
+				EditorGUI.DrawPreviewTexture(rect, this.meshSource.PreviewMaterial.mainTexture, previewMaterial, ScaleMode.StretchToFill, 0f, 0f, colorWriteMask);
 			}
 
 			position.y = -position.y;
