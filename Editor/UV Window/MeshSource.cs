@@ -19,13 +19,13 @@ namespace Nementic.MeshDebugging
             }
         }
 
-        public Material PreviewMaterial => previewMaterial;
+        public Material Material => material;
 
-        public bool HasPreviewMaterial => previewMaterial != null;
+        public bool HasMaterial => material != null;
 
         private Mesh mesh;
         private MeshSourceMode mode;
-        private Material previewMaterial;
+        private Material material;
         private GameObject gameObject;
         private EditorWindow hostWindow;
 
@@ -64,7 +64,7 @@ namespace Nementic.MeshDebugging
         public void Refresh()
         {
             this.mesh = null;
-            this.previewMaterial = null;
+            this.material = null;
             this.gameObject = null;
 
             switch (mode)
@@ -98,7 +98,7 @@ namespace Nementic.MeshDebugging
                 {
                     var renderer = meshFilter.GetComponent<Renderer>();
                     if (renderer != null)
-                        previewMaterial = renderer.sharedMaterial;
+                        material = renderer.sharedMaterial;
 
                     this.mesh = meshFilter.sharedMesh;
                 }
@@ -107,7 +107,7 @@ namespace Nementic.MeshDebugging
                     var skinnedMeshRenderer = gameObject.GetComponentInChildren<SkinnedMeshRenderer>();
                     if (skinnedMeshRenderer != null)
                     {
-                        previewMaterial = skinnedMeshRenderer.sharedMaterial;
+                        material = skinnedMeshRenderer.sharedMaterial;
 
                         this.mesh = skinnedMeshRenderer.sharedMesh;
                     }
