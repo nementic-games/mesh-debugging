@@ -4,7 +4,6 @@
     {
         _MainTex ("Texture", 2D) = "white" {}
 		_Alpha ("Alpha", Range(0, 1)) = 1
-		[Enum(UnityEngine.Rendering.ColorWriteMask)] _ColorWriteMask("ColorWriteMask", Float) = 15 //"All"
     }
     SubShader
     {
@@ -12,9 +11,7 @@
 		Cull Off
 		ZWrite Off
 		Blend SrcAlpha OneMinusSrcAlpha
-		ColorMask[_ColorWriteMask]
 
-		// Regular map
         Pass
         {
             CGPROGRAM
@@ -36,6 +33,8 @@
 				float2 clipUV : TEXCOORD1;
             };
 
+			fixed _IsBumpMap;
+			fixed _ColorMask;
             sampler2D _MainTex;
 			sampler2D _GUIClipTexture;
 			uniform float4x4 unity_GUIClipTextureMatrix;
@@ -52,59 +51,30 @@
                 return o;
             }
 
-            fixed4 frag (v2f i) : SV_Target
-            {
-                fixed4 col = tex2D(_MainTex, i.uv);
-				col.a = _Alpha *  tex2D(_GUIClipTexture, i.clipUV).a;
-				return col;
-            }
-            ENDCG
-        }
+			fixed4 frag(v2f i) : SV_Target
+			{
+				fixed4 texColor;
 
-		// Normal map
-		Pass
-        {
-            CGPROGRAM
-            #pragma vertex vert
-            #pragma fragment frag
+				// Convert from the packed normal map representation back to the original RGB
+				// values to show the typical purple texture.
+				if (_IsBumpMap)
+					texColor = fixed4((UnpackNormal(tex2D(_MainTex, i.uv)) / 2) + float3(0.5, 0.5, 0.5), 1);
+				else
+					texColor = tex2D(_MainTex, i.uv);
 
-            #include "UnityCG.cginc"
+				fixed4 color = fixed4(texColor.r, texColor.g, texColor.b, _Alpha);
 
-            struct appdata
-            {
-                float4 vertex : POSITION;
-                float2 uv : TEXCOORD0;
-            };
+				if (_ColorMask == 1) // red
+					color.rgb = fixed4(color.r, 0, 0, 1);
 
-            struct v2f
-            {
-                float2 uv : TEXCOORD0;
-                float4 vertex : SV_POSITION;
-				float2 clipUV : TEXCOORD1;
-            };
+				if (_ColorMask == 2) // green
+					color.rgb = fixed4(0, color.g, 0, 1);
 
-            sampler2D _MainTex;
-			sampler2D _GUIClipTexture;
-			uniform float4x4 unity_GUIClipTextureMatrix;
-            float4 _MainTex_ST;
-			float _Alpha;
+				if (_ColorMask == 3) // blue
+					color.rgb = fixed4(0, 0, color.b, 1);
 
-            v2f vert (appdata v)
-            {
-                v2f o;
-                o.vertex = UnityObjectToClipPos(v.vertex);
-                o.uv = TRANSFORM_TEX(v.uv, _MainTex);
-				float3 eyePos = UnityObjectToViewPos(v.vertex);
-				o.clipUV = mul(unity_GUIClipTextureMatrix, float4(eyePos.xy, 0, 1.0));
-                return o;
-            }
-
-            fixed4 frag (v2f i) : SV_Target
-            {
-				fixed3 col = (UnpackNormal(tex2D(_MainTex, i.uv)) / 2) + float3(0.5, 0.5, 0.5);
-                fixed4 outcol = fixed4(col.r, col.g, col.b, 1);
-				outcol.a = _Alpha *  tex2D(_GUIClipTexture, i.clipUV).a;
-				return outcol;
+				color.a *= tex2D(_GUIClipTexture, i.clipUV).a;
+				return color;
             }
             ENDCG
         }
