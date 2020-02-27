@@ -8,7 +8,6 @@ namespace Nementic.MeshDebugging
 	using System.Linq;
 	using UnityEditor;
 	using UnityEngine;
-	using UnityEngine.Rendering;
 
 	public class UVWindow : EditorWindow
 	{
@@ -82,6 +81,8 @@ namespace Nementic.MeshDebugging
 				previewMaterial = new Material(shader);
 				previewMaterial.hideFlags = HideFlags.HideAndDontSave;
 			}
+
+			UpdatePreviewMaterialColorChannel();
 		}
 
 		private void OnDisable()
@@ -187,7 +188,11 @@ namespace Nementic.MeshDebugging
 
 			EditorGUILayout.BeginHorizontal();
 			EditorGUILayout.PrefixLabel("Color");
+
+			EditorGUI.BeginChangeCheck();
 			colorChannel = (ColorChannel)GUILayout.Toolbar((int)colorChannel, colorChannelLabels, GUI.skin.button, GUI.ToolbarButtonSize.FitToContents);
+			if (EditorGUI.EndChangeCheck())
+				UpdatePreviewMaterialColorChannel();
 
 			EditorGUILayout.EndHorizontal();
 
@@ -216,6 +221,24 @@ namespace Nementic.MeshDebugging
 
 			EditorGUIUtility.labelWidth = labelWidth;
 			GUILayout.EndArea();
+		}
+
+		private void UpdatePreviewMaterialColorChannel()
+		{
+			Vector4 colorMask = Vector4.one;
+			switch (colorChannel)
+			{
+				case ColorChannel.R:
+					colorMask = new Vector4(1, 0, 0, 1);
+					break;
+				case ColorChannel.G:
+					colorMask = new Vector4(0, 01, 0, 1);
+					break;
+				case ColorChannel.B:
+					colorMask = new Vector4(0, 0, 1, 1);
+					break;
+			}
+			previewMaterial.SetVector("_ColorMask", colorMask);
 		}
 
 		private void GraphArea(Rect graphWindowRect, float unitPixelSize, Mesh mesh)
@@ -343,7 +366,6 @@ namespace Nementic.MeshDebugging
 					textureScale = new Vector2(scale, scale) / textureScale;
 
 					Rect rect = new Rect(texturePosition, textureScale);
-					previewMaterial.SetInt("_ColorMask", (int)colorChannel);
 
 					int isBumpMap = texturePropertyName.Contains("Bump") ? 1 : 0;
 					previewMaterial.SetInt("_IsBumpMap", isBumpMap);

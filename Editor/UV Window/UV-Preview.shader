@@ -33,13 +33,13 @@
 				float2 clipUV : TEXCOORD1;
             };
 
-			fixed _IsBumpMap;
-			fixed _ColorMask;
             sampler2D _MainTex;
-			sampler2D _GUIClipTexture;
-			uniform float4x4 unity_GUIClipTextureMatrix;
             float4 _MainTex_ST;
 			float _Alpha;
+			float4 _ColorMask;
+			sampler2D _GUIClipTexture;
+			float4x4 unity_GUIClipTextureMatrix;
+			fixed _IsBumpMap;
 
             v2f vert (appdata v)
             {
@@ -56,23 +56,14 @@
 				fixed4 texColor;
 
 				// Convert from the packed normal map representation back to the original RGB
-				// values to show the typical purple texture.
+				// values to show the desired purple texture.
 				if (_IsBumpMap)
 					texColor = fixed4((UnpackNormal(tex2D(_MainTex, i.uv)) / 2) + float3(0.5, 0.5, 0.5), 1);
 				else
 					texColor = tex2D(_MainTex, i.uv);
 
 				fixed4 color = fixed4(texColor.r, texColor.g, texColor.b, _Alpha);
-
-				if (_ColorMask == 1) // red
-					color.rgb = fixed4(color.r, 0, 0, 1);
-
-				if (_ColorMask == 2) // green
-					color.rgb = fixed4(0, color.g, 0, 1);
-
-				if (_ColorMask == 3) // blue
-					color.rgb = fixed4(0, 0, color.b, 1);
-
+				color.rgb *= _ColorMask.rgb;
 				color.a *= tex2D(_GUIClipTexture, i.clipUV).a;
 				return color;
             }
