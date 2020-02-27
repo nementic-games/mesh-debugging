@@ -30,9 +30,10 @@ namespace Nementic.MeshDebugging
 		private Vector2 origin;
 		private float zoom = 1f;
 		private readonly float unitPixelSize = 300f;
+		private float uvMeshAlpha = 1f;
 		private UVChannel uvChannel = UVChannel.UV0;
-		private int materialChannel = 0;
 		private float textureAlpha = 1f;
+		private Color uvColor = Color.cyan * 0.95f;
 		private string[] colorChannelLabels = new string[] { "RGB", "R", "G", "B" };
 		private ColorChannel colorChannel = ColorChannel.All;
 		private string texturePropertyName = "_MainTex";
@@ -145,23 +146,21 @@ namespace Nementic.MeshDebugging
 			GUILayout.BeginArea(rect);
 
 			float labelWidth = EditorGUIUtility.labelWidth;
-			EditorGUIUtility.labelWidth = 105;
+			EditorGUIUtility.labelWidth = 100;
 
-			materialChannel = EditorGUILayout.Toggle("Show Texture", materialChannel == 0) ? 0 : -1;
+			EditorGUILayout.LabelField("UV", EditorStyles.boldLabel);
+			EditorGUI.indentLevel++;
 
-			EditorGUI.BeginChangeCheck();
-			textureAlpha = EditorGUILayout.Slider("Texture Alpha", textureAlpha, 0f, 1f);
-			if (EditorGUI.EndChangeCheck())
-				previewMaterial.SetFloat("_Alpha", textureAlpha);
-
-			EditorGUILayout.BeginHorizontal();
-			EditorGUILayout.PrefixLabel("Color Channels");
-			colorChannel = (ColorChannel)GUILayout.Toolbar((int)colorChannel, colorChannelLabels, GUI.skin.button, GUI.ToolbarButtonSize.FitToContents);
-
-			EditorGUILayout.EndHorizontal();
+			uvMeshAlpha = EditorGUILayout.Slider("Alpha", uvMeshAlpha, 0f, 1f);
+			uvColor = EditorGUILayout.ColorField(
+				new GUIContent("Color"),
+				uvColor,
+				showEyedropper: true,
+				showAlpha: false,
+				hdr: false);
 
 			EditorGUI.BeginChangeCheck();
-			uvChannel = (UVChannel)EditorGUILayout.EnumPopup("UV Channel", uvChannel);
+			uvChannel = (UVChannel)EditorGUILayout.EnumPopup("Channel", uvChannel);
 			if (EditorGUI.EndChangeCheck())
 			{
 				if (this.meshSource != null)
@@ -174,6 +173,23 @@ namespace Nementic.MeshDebugging
 						base.RemoveNotification();
 				}
 			}
+
+			EditorGUI.indentLevel--;
+
+			EditorGUILayout.Space();
+			EditorGUILayout.LabelField("Texture", EditorStyles.boldLabel);
+			EditorGUI.indentLevel++;
+
+			EditorGUI.BeginChangeCheck();
+			textureAlpha = EditorGUILayout.Slider("Alpha", textureAlpha, 0f, 1f);
+			if (EditorGUI.EndChangeCheck())
+				previewMaterial.SetFloat("_Alpha", textureAlpha);
+
+			EditorGUILayout.BeginHorizontal();
+			EditorGUILayout.PrefixLabel("Color");
+			colorChannel = (ColorChannel)GUILayout.Toolbar((int)colorChannel, colorChannelLabels, GUI.skin.button, GUI.ToolbarButtonSize.FitToContents);
+
+			EditorGUILayout.EndHorizontal();
 
 			using (new EditorGUI.DisabledScope(this.meshSource.HasMaterial == false))
 			{
@@ -188,13 +204,15 @@ namespace Nementic.MeshDebugging
 						selectedIndex = 0;
 
 					EditorGUI.BeginChangeCheck();
-					selectedIndex = EditorGUILayout.Popup("Texture Channel", selectedIndex, names);
+					selectedIndex = EditorGUILayout.Popup("Source Map", selectedIndex, names);
 					if (EditorGUI.EndChangeCheck())
 						texturePropertyName = names[selectedIndex];
 				}
 				else
-					EditorGUILayout.LabelField("Texture Channel", "<None>");
+					EditorGUILayout.LabelField("Source Map", "<None>");
 			}
+
+			EditorGUI.indentLevel--;
 
 			EditorGUIUtility.labelWidth = labelWidth;
 			GUILayout.EndArea();
@@ -309,7 +327,7 @@ namespace Nementic.MeshDebugging
 				return;
 
 			// TODO: Ensure preview is drawn behind labels.
-			if (this.materialChannel == 0 && this.meshSource.HasMaterial)
+			if (this.meshSource.HasMaterial)
 			{
 				Texture texture = this.meshSource.Material.GetTexture(texturePropertyName);
 
@@ -338,7 +356,9 @@ namespace Nementic.MeshDebugging
 			GraphBackground.ApplyWireMaterial();
 			GL.PushMatrix();
 			GL.Begin(GL.LINES);
-			GL.Color(Color.cyan * 0.95f);
+
+			uvColor.a = uvMeshAlpha;
+			GL.Color(uvColor);
 
 			for (int i = 0; i < triangleBuffer.Count; i += 3)
 			{
