@@ -13,26 +13,38 @@ namespace Nementic.MeshDebugging.UV
 		[MenuItem("Nementic/Mesh Debugging/UV Window")]
 		public static UVWindow GetWindow()
 		{
-			var window = GetWindow<UVWindow>("UV Window");
+			var window = GetWindow<UVWindow>();
+			window.titleContent = new GUIContent("UV Window", window.icon);
+
+			// Start the graph origin at the window center as a fallback. 
 			window.origin = window.position.size * 0.5f;
+
+			// Once initialization is over, focus the UV map if possible.
+			window.scheduleFocusView = true;
+
 			return window;
 		}
 
+#pragma warning disable 0649
+		[SerializeField]
+		private Texture2D icon;
+#pragma warning restore 0649
+
 		public Mesh Mesh
 		{
-			set => meshSource.Mesh = value;
+			get { return meshSource.Mesh; }
+			set { meshSource.Mesh = value; }
 		}
 
 		private MeshSource meshSource;
+		private bool needsMeshRefresh;
 		private readonly List<Vector2> uvBuffer = new List<Vector2>(64);
 		private readonly List<int> triangleBuffer = new List<int>(32);
 
+		private bool scheduleFocusView;
 		private Vector2 origin;
 		private float zoom = 1f;
 		private bool validDragStarted = false;
-		private static readonly float zoomSpeed = 0.1f;
-		private static readonly float minZoom = 0.5f;
-		private static readonly float maxZoom = 10f;
 		private static readonly float unitPixelSize = 300f;
 
 		private Options options = new Options();
@@ -43,20 +55,12 @@ namespace Nementic.MeshDebugging.UV
 
 		private void OnEnable()
 		{
-			base.wantsMouseMove = true;
-
 			if (meshSource == null)
 				meshSource = new MeshSource(this);
 
-			// Selection is null during OnEnable in play mode.
-			// Maybe this is Unity bug, but a frame later its valid again.
-			EditorApplication.delayCall += () =>
-			{
-				meshSource.Refresh();
-				Repaint();
-			};
-
+			base.wantsMouseMove = true;
 			options.OnEnable();
+			needsMeshRefresh = true;
 		}
 
 		private void OnDisable()
@@ -72,10 +76,22 @@ namespace Nementic.MeshDebugging.UV
 
 		private void OnGUI()
 		{
-			Rect toolbarRect = new Rect(0, -1, position.width, EditorGUIUtility.singleLineHeight);
+			if (needsMeshRefresh)
+			{
+				meshSource.Refresh();
+				needsMeshRefresh = false;
+			}
+
+			if (scheduleFocusView)
+			{
+				FocusView();
+				scheduleFocusView = false;
+			}
+
+			Rect toolbarRect = new Rect(-1, 0, position.width, 20);
 			Toolbar(toolbarRect, meshSource);
 
-			Rect graphWindowRect = new Rect(0, toolbarRect.yMax + 2, position.width, position.height - toolbarRect.height - 2);
+			Rect graphWindowRect = new Rect(0, toolbarRect.yMax + 1, position.width, position.height - toolbarRect.height - 2);
 
 			if (UVWindowSettings.showOptions.value == true)
 			{
@@ -85,8 +101,7 @@ namespace Nementic.MeshDebugging.UV
 					optionsPanelSizeSet = true;
 				}
 
-				float optionsPanelPosition = Mathf.Clamp(options.normalizedPosition * EditorGUIUtility.currentViewWidth, 50, EditorGUIUtility.currentViewWidth - 150);
-				optionsRect = new Rect(optionsPanelPosition, graphWindowRect.yMin, EditorGUIUtility.currentViewWidth - optionsPanelPosition, graphWindowRect.height);
+				optionsRect = new Rect(OptionsPanelPosition, toolbarRect.yMax, EditorGUIUtility.currentViewWidth - OptionsPanelPosition, graphWindowRect.height);
 				graphWindowRect.xMax = optionsRect.xMin;
 
 				options.Draw(optionsRect, meshSource, uvBuffer, this);
@@ -94,6 +109,11 @@ namespace Nementic.MeshDebugging.UV
 
 			HandlesMouseEvents(new Vector2(0f, -toolbarRect.height), unitPixelSize, graphWindowRect);
 			GraphArea(graphWindowRect, unitPixelSize, meshSource);
+		}
+
+		private float OptionsPanelPosition
+		{
+			get => Mathf.Clamp(options.normalizedPosition * EditorGUIUtility.currentViewWidth, 50, EditorGUIUtility.currentViewWidth - 150);
 		}
 
 		private void Toolbar(Rect toolbarRect, MeshSource meshSource)
@@ -183,8 +203,7 @@ namespace Nementic.MeshDebugging.UV
 		private void ZoomView(Vector2 mousePosition, float zoomDelta, float unitPixelSize)
 		{
 			float previousZoom = zoom;
-			zoom -= zoomDelta * zoomSpeed;
-			zoom = Mathf.Clamp(zoom, minZoom, maxZoom);
+			zoom = UVWindowSettings.PerformZoom(zoom, zoomDelta);
 
 			Vector2 mouseOffset = (mousePosition - origin);
 			Vector2 gridCoord = mouseOffset / (unitPixelSize * previousZoom);
@@ -198,7 +217,16 @@ namespace Nementic.MeshDebugging.UV
 		{
 			Vector2 windowSize = base.position.size;
 			if (UVWindowSettings.showOptions)
+			{
+				if (optionsPanelSizeSet == false)
+				{
+					options.normalizedPosition = (EditorGUIUtility.currentViewWidth - 230) / EditorGUIUtility.currentViewWidth;
+					optionsPanelSizeSet = true;
+				}
+
+				var optionsRect = new Rect(OptionsPanelPosition, 0, EditorGUIUtility.currentViewWidth - OptionsPanelPosition, 0);
 				windowSize.x -= optionsRect.width;
+			}
 			Vector2 graphOrigin = windowSize * 0.5f;
 
 			Vector2 uvMapSize = CalculateUVBounds().size * 0.5f * unitPixelSize;
@@ -265,6 +293,9 @@ namespace Nementic.MeshDebugging.UV
 		private Rect CalculateUVBounds()
 		{
 			Rect bounds = new Rect();
+
+			if (uvBuffer.Count == 0 && this.Mesh != null)
+				this.Mesh.GetUVs((int)options.uvChannel, uvBuffer);
 
 			if (uvBuffer.Count > 0)
 			{

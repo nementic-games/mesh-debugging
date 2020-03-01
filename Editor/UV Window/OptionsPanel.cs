@@ -30,8 +30,7 @@ namespace Nementic.MeshDebugging.UV
 				previewMaterial.hideFlags = HideFlags.HideAndDontSave;
 			}
 
-			var colorMask = GetPreviewMaterialColorMask();
-			previewMaterial.SetVector("_ColorMask", colorMask);
+			UpdatePreviewMaterialColorMask();
 		}
 
 		public void OnDisable()
@@ -45,6 +44,9 @@ namespace Nementic.MeshDebugging.UV
 
 		public void Draw(Rect rect, MeshSource meshSource, List<Vector2> uvBuffer, EditorWindow host)
 		{
+			Rect leftBorder = rect;
+			leftBorder.width = 1;
+
 			Rect cursorRect = rect;
 			cursorRect.width = 10;
 			cursorRect.x -= 5;
@@ -118,7 +120,7 @@ namespace Nementic.MeshDebugging.UV
 			EditorGUI.BeginChangeCheck();
 			colorChannel = (ColorChannel)GUILayout.Toolbar((int)colorChannel, colorChannelLabels, GUI.skin.button, GUI.ToolbarButtonSize.FitToContents);
 			if (EditorGUI.EndChangeCheck())
-				GetPreviewMaterialColorMask();
+				UpdatePreviewMaterialColorMask();
 
 			EditorGUILayout.EndHorizontal();
 
@@ -148,12 +150,10 @@ namespace Nementic.MeshDebugging.UV
 			EditorGUIUtility.labelWidth = labelWidth;
 			GUILayout.EndArea();
 
-			cursorRect.xMax -= 3f;
-			cursorRect.yMin += 1;
-			EditorGUI.DrawRect(cursorRect, new Color(0.15f, 0.15f, 0.15f));
+			EditorGUI.DrawRect(leftBorder, new Color32(35, 35, 35, 255));
 		}
 
-		private Vector4 GetPreviewMaterialColorMask()
+		private void UpdatePreviewMaterialColorMask()
 		{
 			Vector4 colorMask = Vector4.one;
 			switch (colorChannel)
@@ -168,7 +168,7 @@ namespace Nementic.MeshDebugging.UV
 					colorMask = new Vector4(0, 0, 1, 1);
 					break;
 			}
-			return colorMask;
+			previewMaterial.SetVector("_ColorMask", colorMask);
 		}
 
 		public void DrawPreviewTexture(Material sourceMaterial, Vector2 position, float scale)

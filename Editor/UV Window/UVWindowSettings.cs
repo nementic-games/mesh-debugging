@@ -37,16 +37,38 @@ namespace Nementic.MeshDebugging.UV
 			}
 		}
 
+		[UserSetting()]
+		public static readonly UserSetting<float> zoomSpeed;
+
+		[UserSetting()]
+		public static readonly UserSetting<float> minZoom;
+
+		[UserSetting()]
+		public static readonly UserSetting<float> maxZoom;
+
+		public static float PerformZoom(float zoom, float delta)
+		{
+			zoom -= delta * zoomSpeed;
+			zoom = Mathf.Clamp(zoom, minZoom, maxZoom);
+			return zoom;
+		}
+
 		static UVWindowSettings()
 		{
+			// Using the static constructor is very important here,
+			// because the properties may be accessed by the SettingsProvider
+			// before they are initialized otherwise.
+
 			settings = new Settings("com.nementic.mesh-debugging", "UVWindowSettings");
 
 			showOptions = new WindowSetting<bool>("showOptions", false);
 			uvAlpha = new WindowSetting<float>("uvAlpha", 1f);
 			uvColor = new WindowSetting<Color>("uvColor", Color.cyan * 0.95f);
 			textureAlpha = new WindowSetting<float>("textureAlpha", 1f);
+			zoomSpeed = new WindowSetting<float>("zoomSpeed", 0.1f);
+			minZoom = new WindowSetting<float>("minZoom", 0.5f);
+			maxZoom = new WindowSetting<float>("maxZoom", 10f);
 		}
-
 
 		private static readonly Settings settings;
 
@@ -64,6 +86,25 @@ namespace Nementic.MeshDebugging.UV
 			return new UserSettingsProvider("Nementic/UV Window",
 				settings,
 				new[] { typeof(UVWindow).Assembly });
+		}
+
+		[UserSettingBlock("Graph Zoom")]
+		private static void GraphZoomSettings(string searchContext)
+		{
+			EditorGUI.BeginChangeCheck();
+
+			zoomSpeed.value = SettingsGUILayout.SettingsSlider("Speed", zoomSpeed, float.MinValue, float.MaxValue, searchContext);
+			minZoom.value = SettingsGUILayout.SettingsSlider("Minimum", minZoom, 0.01f, 1f, searchContext);
+			maxZoom.value = SettingsGUILayout.SettingsSlider("Maximum", maxZoom, 1f, 100f, searchContext);
+
+			if (EditorGUI.EndChangeCheck())
+			{
+				zoomSpeed.ApplyModifiedProperties();
+				minZoom.ApplyModifiedProperties();
+				maxZoom.ApplyModifiedProperties();
+
+				settings.Save();
+			}
 		}
 	}
 }
