@@ -2,255 +2,324 @@
 // Author: Chris Yarbrough
 
 #if UNITY_EDITOR
-namespace Nementic.MeshDebugging
+namespace Nementic.MeshDebugging.UV
 {
-    using System.Collections.Generic;
-    using UnityEditor;
-    using UnityEngine;
+	using System.Collections.Generic;
+	using UnityEditor;
+	using UnityEngine;
 
-    public class UVWindow : EditorWindow
-    {
-        [MenuItem("Nementic/Mesh Debugging/UV Window")]
-        public static void ShowWindow()
-        {
-            var window = GetWindow<UVWindow>("UV Window");
-            window.origin = window.position.size * 0.5f;
-        }
+	public class UVWindow : EditorWindow
+	{
+		[MenuItem("Nementic/Mesh Debugging/UV Window")]
+		public static UVWindow GetWindow()
+		{
+			var window = GetWindow<UVWindow>();
+			window.titleContent = new GUIContent("UV Window", window.icon);
 
-        [SerializeField]
-        private Vector2 origin;
+			// Start the graph origin at the window center as a fallback. 
+			window.origin = window.position.size * 0.5f;
 
-        [SerializeField]
-        private float zoom = 1f;
+			// Once initialization is over, focus the UV map if possible.
+			window.scheduleFocusView = true;
 
-        [SerializeField]
-        private UVChannel uvChannel = UVChannel.UV0;
+			return window;
+		}
 
-        private GUIStyle toolbarButtonStyle;
-        private static readonly float zoomSpeed = 0.1f;
-        private static readonly float minZoom = 0.5f;
-        private static readonly float maxZoom = 10f;
-        private readonly List<Vector2> uvBuffer = new List<Vector2>(64);
-        private readonly List<int> triangleBuffer = new List<int>(32);
+#pragma warning disable 0649
+		[SerializeField]
+		private Texture2D icon;
+#pragma warning restore 0649
 
-        private enum UVChannel
-        {
-            UV0,
-            UV1,
-            UV2,
-            UV3,
-            UV4,
-            UV5,
-            UV6,
-            UV7,
-        }
+		public Mesh Mesh
+		{
+			get { return meshSource.Mesh; }
+			set { meshSource.Mesh = value; }
+		}
 
-        private void OnEnable()
-        {
-            base.wantsMouseMove = true;
-        }
+		private MeshSource meshSource;
+		private bool needsMeshRefresh;
+		private readonly List<Vector2> uvBuffer = new List<Vector2>(64);
+		private readonly List<int> triangleBuffer = new List<int>(32);
 
-        private void OnSelectionChange()
-        {
-            Repaint();
-        }
+		private bool scheduleFocusView;
+		private Vector2 origin;
+		private float zoom = 1f;
+		private bool validDragStarted = false;
+		private static readonly float unitPixelSize = 300f;
 
-        private void OnGUI()
-        {
-            Mesh mesh = FindMesh();
+		private Options options = new Options();
+		private bool optionsPanelSizeSet;
+		private Rect optionsRect;
 
-            Rect toolbarRect = new Rect(0, -1, position.width, EditorGUIUtility.singleLineHeight);
-            Toolbar(toolbarRect, mesh);
+		private GUIStyle toolbarButtonStyle;
 
-            float unitPixelSize = 300f;
-            HandlesMouseEvents(new Vector2(0f, -toolbarRect.height), unitPixelSize);
+		private void OnEnable()
+		{
+			if (meshSource == null)
+				meshSource = new MeshSource(this);
 
-            Rect graphWindowRect = new Rect(0, toolbarRect.yMax + 2, position.width, position.height - toolbarRect.height - 2);
-            GraphArea(graphWindowRect, unitPixelSize, mesh);
-        }
+			base.wantsMouseMove = true;
+			options.OnEnable();
+			needsMeshRefresh = true;
+		}
 
-        private void Toolbar(Rect toolbarRect, Mesh mesh)
-        {
-            string label = mesh != null ? mesh.name : string.Empty;
-            GUILayout.BeginArea(toolbarRect, EditorStyles.toolbar);
-            GUILayout.BeginHorizontal();
+		private void OnDisable()
+		{
+			options.OnDisable();
+		}
 
-            GUILayout.FlexibleSpace();
+		private void OnSelectionChange()
+		{
+			meshSource.Refresh();
+			Repaint();
+		}
 
-            GUILayout.Label(label, EditorStyles.centeredGreyMiniLabel);
+		private void OnGUI()
+		{
+			if (needsMeshRefresh)
+			{
+				meshSource.Refresh();
+				needsMeshRefresh = false;
+			}
 
-            GUILayout.FlexibleSpace();
+			if (scheduleFocusView)
+			{
+				FocusView();
+				scheduleFocusView = false;
+			}
 
-            InitializeStyles();
+			Rect toolbarRect = new Rect(-1, 0, position.width, 20);
+			Toolbar(toolbarRect, meshSource);
 
-            if (GUILayout.Button("Recenter", toolbarButtonStyle, GUILayout.Width(70)))
-                ResetView();
+			Rect graphWindowRect = new Rect(0, toolbarRect.yMax + 1, position.width, position.height - toolbarRect.height - 2);
 
-            EditorGUI.BeginChangeCheck();
-            uvChannel = (UVChannel)EditorGUILayout.EnumPopup(uvChannel, EditorStyles.toolbarDropDown, GUILayout.Width(50));
-            if (EditorGUI.EndChangeCheck())
-            {
-                if (mesh != null)
-                {
-                    mesh.GetUVs((int)uvChannel, uvBuffer);
+			if (UVWindowSettings.showOptions.value == true)
+			{
+				if (optionsPanelSizeSet == false)
+				{
+					options.normalizedPosition = (EditorGUIUtility.currentViewWidth - 230) / EditorGUIUtility.currentViewWidth;
+					optionsPanelSizeSet = true;
+				}
 
-                    if (uvBuffer.Count == 0)
-                        base.ShowNotification(new GUIContent($"No {uvChannel.ToString()} found."));
-                    else
-                        base.RemoveNotification();
-                }
-            }
+				optionsRect = new Rect(OptionsPanelPosition, toolbarRect.yMax, EditorGUIUtility.currentViewWidth - OptionsPanelPosition, graphWindowRect.height);
+				graphWindowRect.xMax = optionsRect.xMin;
 
-            GUILayout.Space(4);
+				options.Draw(optionsRect, meshSource, uvBuffer, this);
+			}
 
-            GUILayout.EndHorizontal();
-            GUILayout.EndArea();
-        }
+			HandlesMouseEvents(new Vector2(0f, -toolbarRect.height), unitPixelSize, graphWindowRect);
+			GraphArea(graphWindowRect, unitPixelSize, meshSource);
+		}
 
-        private void GraphArea(Rect graphWindowRect, float unitPixelSize, Mesh mesh)
-        {
-            if (Event.current.type != EventType.Repaint)
-                return;
+		private float OptionsPanelPosition
+		{
+			get => Mathf.Clamp(options.normalizedPosition * EditorGUIUtility.currentViewWidth, 50, EditorGUIUtility.currentViewWidth - 150);
+		}
 
-            float zoomedPixelSize = unitPixelSize * zoom;
-            Vector2 graphSize = Vector2.one * zoomedPixelSize * 6f;
-            Rect graphRect = new Rect(-graphSize * 0.5f, graphSize);
+		private void Toolbar(Rect toolbarRect, MeshSource meshSource)
+		{
+			GUILayout.BeginArea(toolbarRect, EditorStyles.toolbar);
+			GUILayout.BeginHorizontal();
 
-            GUI.BeginClip(graphWindowRect);
-            graphRect.position += origin;
+			meshSource.DrawOptionPicker();
+			GUILayout.FlexibleSpace();
 
-            Rect backgroundRect = new Rect(0, 0, graphWindowRect.width, graphWindowRect.height);
-            GraphBackground.DrawGraphBackground(backgroundRect, graphRect, zoomedPixelSize);
+			InitializeStyles();
 
-            Handles.color = Color.gray;
-            Handles.DotHandleCap(0, origin, Quaternion.identity, 2.5f, EventType.Repaint);
+			if (GUILayout.Button("Focus", toolbarButtonStyle, GUILayout.Width(50)))
+				FocusView();
 
-            DrawUVs(mesh, origin, zoomedPixelSize);
+			UVWindowSettings.showOptions.value = GUILayout.Toggle(UVWindowSettings.showOptions, "Options", EditorStyles.toolbarButton);
 
-            GUI.EndClip();
-        }
+			GUILayout.Space(4);
 
-        private void InitializeStyles()
-        {
-            if (toolbarButtonStyle == null)
-            {
-                toolbarButtonStyle = new GUIStyle(EditorStyles.toolbarButton)
-                {
-                    alignment = TextAnchor.MiddleCenter,
-                    padding = new RectOffset(4, 0, 0, 0)
-                };
-            }
-        }
+			GUILayout.EndHorizontal();
+			GUILayout.EndArea();
+		}
 
-        private void HandlesMouseEvents(Vector2 mouseCorrection, float unitPixelSize)
-        {
-            Event current = Event.current;
+		private void GraphArea(Rect graphWindowRect, float unitPixelSize, Mesh mesh)
+		{
+			if (Event.current.type != EventType.Repaint)
+				return;
 
-            if (current.type == EventType.MouseDrag && current.button != -1)
-            {
-                origin += current.delta;
-                current.Use();
-                Repaint();
-            }
-            else if (current.type == EventType.ScrollWheel)
-            {
-                ZoomView(current.mousePosition + mouseCorrection, current.delta.y, unitPixelSize);
-                current.Use();
-            }
-            else if (current.isKey && current.keyCode == KeyCode.F)
-            {
-                ResetView();
-                current.Use();
-            }
-        }
+			float zoomedPixelSize = unitPixelSize * zoom;
+			Vector2 graphSize = Vector2.one * zoomedPixelSize * 6f;
+			Rect graphRect = new Rect(-graphSize * 0.5f, graphSize);
 
-        private void ZoomView(Vector2 mousePosition, float zoomDelta, float unitPixelSize)
-        {
-            float previousZoom = zoom;
-            zoom -= zoomDelta * zoomSpeed;
-            zoom = Mathf.Clamp(zoom, minZoom, maxZoom);
+			GUI.BeginClip(graphWindowRect);
+			graphRect.position += origin;
 
-            Vector2 mouseOffset = (mousePosition - origin);
-            Vector2 gridCoord = mouseOffset / (unitPixelSize * previousZoom);
-            Vector2 offset = gridCoord * unitPixelSize * zoom - mouseOffset;
+			Rect backgroundRect = new Rect(0, 0, graphWindowRect.width, graphWindowRect.height);
+			GraphBackground.DrawGraphBackground(backgroundRect, graphRect, zoomedPixelSize);
 
-            origin -= offset;
-            Repaint();
-        }
+			Handles.color = Color.gray;
+			Handles.DotHandleCap(0, origin, Quaternion.identity, 2.5f, EventType.Repaint);
 
-        private void ResetView()
-        {
-            origin = base.position.size * 0.5f;
-            zoom = 1f;
-            Repaint();
-        }
+			DrawUVs(mesh, origin, zoomedPixelSize);
 
-        private Mesh FindMesh()
-        {
-            if (Selection.activeObject is Mesh mesh)
-                return mesh;
+			GUI.EndClip();
+		}
 
-            GameObject gameObject = Selection.activeGameObject;
+		private void InitializeStyles()
+		{
+			if (toolbarButtonStyle == null)
+			{
+				toolbarButtonStyle = new GUIStyle(EditorStyles.toolbarButton)
+				{
+					alignment = TextAnchor.MiddleCenter,
+					padding = new RectOffset(4, 0, 0, 0)
+				};
+			}
+		}
 
-            if (gameObject != null)
-            {
-                var meshFilter = gameObject.GetComponentInChildren<MeshFilter>();
+		private void HandlesMouseEvents(Vector2 mouseCorrection, float unitPixelSize, Rect graphWindowRect)
+		{
+			Event current = Event.current;
 
-                if (meshFilter == null)
-                    return null;
+			if (current.type == EventType.MouseDown && graphWindowRect.Contains(current.mousePosition))
+				validDragStarted = true;
 
-                return meshFilter.sharedMesh;
-            }
+			if (current.type == EventType.MouseUp)
+				validDragStarted = false;
 
-            return null;
-        }
+			if (validDragStarted && current.type == EventType.MouseDrag && current.button != -1)
+			{
+				origin += current.delta;
+				current.Use();
+				Repaint();
+			}
+			else if (current.type == EventType.ScrollWheel)
+			{
+				ZoomView(current.mousePosition + mouseCorrection, current.delta.y, unitPixelSize);
+				current.Use();
+			}
+			else if (current.isKey && current.keyCode == KeyCode.F)
+			{
+				FocusView();
+				current.Use();
+			}
+		}
 
-        private void DrawUVs(Mesh mesh, Vector2 position, float scale)
-        {
-            if (mesh == null)
-                return;
+		private void ZoomView(Vector2 mousePosition, float zoomDelta, float unitPixelSize)
+		{
+			float previousZoom = zoom;
+			zoom = UVWindowSettings.PerformZoom(zoom, zoomDelta);
 
-            if (mesh.vertexCount == 0)
-                return;
+			Vector2 mouseOffset = (mousePosition - origin);
+			Vector2 gridCoord = mouseOffset / (unitPixelSize * previousZoom);
+			Vector2 offset = gridCoord * unitPixelSize * zoom - mouseOffset;
 
-            mesh.GetUVs((int)uvChannel, uvBuffer);
+			origin -= offset;
+			Repaint();
+		}
 
-            if (uvBuffer.Count == 0)
-                return;
+		private void FocusView()
+		{
+			Vector2 windowSize = base.position.size;
+			if (UVWindowSettings.showOptions)
+			{
+				if (optionsPanelSizeSet == false)
+				{
+					options.normalizedPosition = (EditorGUIUtility.currentViewWidth - 230) / EditorGUIUtility.currentViewWidth;
+					optionsPanelSizeSet = true;
+				}
 
-            mesh.GetTriangles(triangleBuffer, 0);
+				var optionsRect = new Rect(OptionsPanelPosition, 0, EditorGUIUtility.currentViewWidth - OptionsPanelPosition, 0);
+				windowSize.x -= optionsRect.width;
+			}
+			Vector2 graphOrigin = windowSize * 0.5f;
 
-            if (triangleBuffer.Count == 0)
-                return;
+			Vector2 uvMapSize = CalculateUVBounds().size * 0.5f * unitPixelSize;
+			uvMapSize.y *= -1f;
+			origin = graphOrigin - uvMapSize;
+			zoom = 1f;
+			Repaint();
+		}
 
-            position.y = -position.y;
+		private void DrawUVs(Mesh mesh, Vector2 position, float scale)
+		{
+			if (mesh == null)
+				return;
 
-            GraphBackground.ApplyWireMaterial();
-            GL.PushMatrix();
-            GL.Begin(GL.LINES);
-            GL.Color(Color.cyan * 0.95f);
+			if (mesh.vertexCount == 0)
+				return;
 
-            for (int i = 0; i < triangleBuffer.Count; i += 3)
-            {
-                Vector3 a = position + scale * uvBuffer[triangleBuffer[i]];
-                Vector3 b = position + scale * uvBuffer[triangleBuffer[i + 1]];
-                Vector3 c = position + scale * uvBuffer[triangleBuffer[i + 2]];
+			mesh.GetUVs((int)options.uvChannel, uvBuffer);
 
-                a.y = -a.y;
-                b.y = -b.y;
-                c.y = -c.y;
+			if (uvBuffer.Count == 0)
+				return;
 
-                GL.Vertex(a);
-                GL.Vertex(b);
-                GL.Vertex(b);
-                GL.Vertex(c);
-                GL.Vertex(c);
-                GL.Vertex(a);
-            }
+			mesh.GetTriangles(triangleBuffer, 0);
 
-            GL.End();
-            GL.PopMatrix();
-        }
-    }
+			if (triangleBuffer.Count == 0)
+				return;
+
+			// TODO: Ensure preview is drawn behind labels.
+			if (this.meshSource.HasMaterial)
+			{
+				options.DrawPreviewTexture(this.meshSource.Material, position, scale);
+			}
+
+			position.y = -position.y;
+
+			GraphBackground.ApplyWireMaterial();
+			GL.PushMatrix();
+			GL.Begin(GL.LINES);
+
+			GL.Color(UVWindowSettings.UVColorWithAlpha);
+
+			for (int i = 0; i < triangleBuffer.Count; i += 3)
+			{
+				Vector3 a = position + scale * uvBuffer[triangleBuffer[i]];
+				Vector3 b = position + scale * uvBuffer[triangleBuffer[i + 1]];
+				Vector3 c = position + scale * uvBuffer[triangleBuffer[i + 2]];
+
+				a.y = -a.y;
+				b.y = -b.y;
+				c.y = -c.y;
+
+				GL.Vertex(a);
+				GL.Vertex(b);
+				GL.Vertex(b);
+				GL.Vertex(c);
+				GL.Vertex(c);
+				GL.Vertex(a);
+			}
+
+			GL.End();
+			GL.PopMatrix();
+		}
+
+		private Rect CalculateUVBounds()
+		{
+			Rect bounds = new Rect();
+
+			if (uvBuffer.Count == 0 && this.Mesh != null)
+				this.Mesh.GetUVs((int)options.uvChannel, uvBuffer);
+
+			if (uvBuffer.Count > 0)
+			{
+				bounds.center = uvBuffer[0];
+				for (int i = 1; i < uvBuffer.Count; i++)
+				{
+					Vector2 uv = uvBuffer[i];
+
+					if (uv.x < bounds.xMin)
+						bounds.xMin = uv.x;
+
+					else if (uv.x > bounds.xMax)
+						bounds.xMax = uv.x;
+
+					if (uv.y < bounds.yMin)
+						bounds.yMin = uv.y;
+
+					else if (uv.y > bounds.yMax)
+						bounds.yMax = uv.y;
+				}
+			}
+
+			return bounds;
+		}
+	}
 }
 #endif
