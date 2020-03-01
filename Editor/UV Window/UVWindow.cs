@@ -7,6 +7,7 @@ namespace Nementic.MeshDebugging
 	using System.Collections.Generic;
 	using System.Linq;
 	using UnityEditor;
+	using UnityEditor.SettingsManagement;
 	using UnityEngine;
 
 	public class UVWindow : EditorWindow
@@ -19,6 +20,16 @@ namespace Nementic.MeshDebugging
 			return window;
 		}
 
+		public class WindowSetting<T> : UserSetting<T>
+		{
+			public WindowSetting(string key, T value, SettingsScope scope = SettingsScope.User)
+				: base(UVWindow.settings, key, value, scope)
+			{
+			}
+		}
+
+		private static readonly Settings settings = new Settings("com.nementic.mesh-debugging");
+
 		public Mesh Mesh
 		{
 			set => meshSource.Mesh = value;
@@ -26,13 +37,27 @@ namespace Nementic.MeshDebugging
 
 		private MeshSource meshSource;
 
+		[UserSetting("UV", "Alpha")]
+		private static UserSetting<float> uvMeshAlpha = new WindowSetting<float>("uvMeshAlpha", 1f);
+
+		[UserSetting("UV", "Color")]
+		private static UserSetting<Color> uvColor = new WindowSetting<Color>("uvColor", Color.cyan * 0.95f);
+
+		[UserSetting("Texture", "Alpha")]
+		private static UserSetting<float> textureAlpha = new WindowSetting<float>("textureAlpha", 1f);
+
+		[SettingsProvider]
+		private static SettingsProvider CreateSettingsProvider()
+		{
+			return new UserSettingsProvider("Nementic/UV Window",
+				settings,
+				new[] { typeof(UVWindow).Assembly });
+		}
+
 		private Vector2 origin;
 		private float zoom = 1f;
 		private readonly float unitPixelSize = 300f;
-		private float uvMeshAlpha = 1f;
 		private UVChannel uvChannel = UVChannel.UV0;
-		private float textureAlpha = 1f;
-		private Color uvColor = Color.cyan * 0.95f;
 		private string[] colorChannelLabels = new string[] { "RGB", "R", "G", "B" };
 		private ColorChannel colorChannel = ColorChannel.All;
 		private string texturePropertyName = "_MainTex";
@@ -75,17 +100,33 @@ namespace Nementic.MeshDebugging
 			if (meshSource == null)
 				meshSource = new MeshSource(this);
 
+			// Selection is null during OnEnable in play mode.
+			// Maybe this is Unity bug, but a frame later its valid again.
+			EditorApplication.delayCall += () =>
+			{
+				meshSource.Refresh();
+				Repaint();
+			};
+
+			UpdatePreviewMaterialColorChannel();
+		}
+
+		private void OnDisable()
+		{
+			resize = false;
+		}
+
+		private void Awake()
+		{
 			if (previewMaterial == null)
 			{
 				Shader shader = AssetDatabase.LoadAssetAtPath<Shader>("Packages/com.nementic.mesh-debugging/Editor/UV Window/UV-Preview.shader");
 				previewMaterial = new Material(shader);
 				previewMaterial.hideFlags = HideFlags.HideAndDontSave;
 			}
-
-			UpdatePreviewMaterialColorChannel();
 		}
 
-		private void OnDisable()
+		private void OnDestroy()
 		{
 			if (previewMaterial != null)
 			{
@@ -100,6 +141,15 @@ namespace Nementic.MeshDebugging
 			Repaint();
 		}
 
+		private void OnLostFocus()
+		{
+			resize = false;
+		}
+
+		private bool resize;
+		private bool optionsPanelSizeSet;
+		private float optionsPanelNormalisedPosition;
+
 		private void OnGUI()
 		{
 			Rect toolbarRect = new Rect(0, -1, position.width, EditorGUIUtility.singleLineHeight);
@@ -109,10 +159,16 @@ namespace Nementic.MeshDebugging
 
 			if (showOptions)
 			{
-				const float optionsWidth = 230;
-				graphWindowRect.xMax -= optionsWidth;
+				if (optionsPanelSizeSet == false)
+				{
+					optionsPanelNormalisedPosition = (EditorGUIUtility.currentViewWidth - 230) / EditorGUIUtility.currentViewWidth;
+					optionsPanelSizeSet = true;
+				}
 
-				Rect optionsRect = new Rect(graphWindowRect.xMax, graphWindowRect.yMin, optionsWidth, graphWindowRect.height);
+				float optionsPanelPosition = Mathf.Clamp(optionsPanelNormalisedPosition * EditorGUIUtility.currentViewWidth, 50, EditorGUIUtility.currentViewWidth - 150);
+				var optionsRect = new Rect(optionsPanelPosition, graphWindowRect.yMin, EditorGUIUtility.currentViewWidth - optionsPanelPosition, graphWindowRect.height);
+				graphWindowRect.xMax = optionsRect.xMin;
+
 				DrawOptionsPanel(optionsRect);
 			}
 
@@ -143,6 +199,30 @@ namespace Nementic.MeshDebugging
 
 		private void DrawOptionsPanel(Rect rect)
 		{
+			Rect cursorRect = rect;
+			cursorRect.width = 10;
+			cursorRect.x -= 5;
+
+			if (Event.current.type == EventType.MouseDown && cursorRect.Contains(Event.current.mousePosition))
+			{
+				resize = true;
+				Event.current.Use();
+			}
+
+			if (resize && Event.current.type == EventType.MouseDrag)
+			{
+				optionsPanelNormalisedPosition = Event.current.mousePosition.x / EditorGUIUtility.currentViewWidth;
+				Event.current.Use();
+
+				if (Event.current.type == EventType.MouseDrag)
+					Repaint();
+			}
+
+			if (Event.current.type == EventType.MouseUp)
+				resize = false;
+
+			EditorGUIUtility.AddCursorRect(cursorRect, MouseCursor.ResizeHorizontal);
+
 			rect = rect.Expand(-4);
 			GUILayout.BeginArea(rect);
 
@@ -152,8 +232,8 @@ namespace Nementic.MeshDebugging
 			EditorGUILayout.LabelField("UV", EditorStyles.boldLabel);
 			EditorGUI.indentLevel++;
 
-			uvMeshAlpha = EditorGUILayout.Slider("Alpha", uvMeshAlpha, 0f, 1f);
-			uvColor = EditorGUILayout.ColorField(
+			uvMeshAlpha.value = EditorGUILayout.Slider("Alpha", uvMeshAlpha, 0f, 1f);
+			uvColor.value = EditorGUILayout.ColorField(
 				new GUIContent("Color"),
 				uvColor,
 				showEyedropper: true,
@@ -182,7 +262,7 @@ namespace Nementic.MeshDebugging
 			EditorGUI.indentLevel++;
 
 			EditorGUI.BeginChangeCheck();
-			textureAlpha = EditorGUILayout.Slider("Alpha", textureAlpha, 0f, 1f);
+			textureAlpha.value = EditorGUILayout.Slider("Alpha", textureAlpha, 0f, 1f);
 			if (EditorGUI.EndChangeCheck())
 				previewMaterial.SetFloat("_Alpha", textureAlpha);
 
@@ -221,6 +301,10 @@ namespace Nementic.MeshDebugging
 
 			EditorGUIUtility.labelWidth = labelWidth;
 			GUILayout.EndArea();
+
+			cursorRect.xMax -= 3f;
+			cursorRect.yMin += 1;
+			EditorGUI.DrawRect(cursorRect, new Color(0.15f, 0.15f, 0.15f));
 		}
 
 		private void UpdatePreviewMaterialColorChannel()
@@ -379,8 +463,9 @@ namespace Nementic.MeshDebugging
 			GL.PushMatrix();
 			GL.Begin(GL.LINES);
 
-			uvColor.a = uvMeshAlpha;
-			GL.Color(uvColor);
+			var color = uvColor.value;
+			color.a = uvMeshAlpha;
+			GL.Color(color);
 
 			for (int i = 0; i < triangleBuffer.Count; i += 3)
 			{
