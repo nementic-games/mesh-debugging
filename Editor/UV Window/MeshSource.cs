@@ -41,22 +41,26 @@ namespace Nementic.MeshDebugging.UV
 			if (EditorGUI.EndChangeCheck())
 				Refresh();
 
+			Rect rect = EditorGUILayout.GetControlRect();
+			rect.y -= 1;
+			rect.xMin += 2;
+
 			switch (mode)
 			{
 				case MeshSourceMode.MeshAsset:
-					this.mesh = EditorGUILayout.ObjectField(this.mesh, typeof(Mesh), allowSceneObjects: false) as Mesh;
+					this.mesh = EditorGUI.ObjectField(rect, this.mesh, typeof(Mesh), allowSceneObjects: false) as Mesh;
 					break;
 
 				case MeshSourceMode.GameObject:
 					EditorGUI.BeginChangeCheck();
-					this.gameObject = EditorGUILayout.ObjectField(this.gameObject, typeof(GameObject), allowSceneObjects: true) as GameObject;
+					this.gameObject = EditorGUI.ObjectField(rect, this.gameObject, typeof(GameObject), allowSceneObjects: true) as GameObject;
 					if (EditorGUI.EndChangeCheck())
 						Refresh();
 					break;
 
 				case MeshSourceMode.Selection:
 					string label = mesh != null ? mesh.name : "<Nothing Selected>";
-					GUILayout.Label(label, EditorStyles.boldLabel);
+					GUI.Label(rect, label, EditorStyles.boldLabel);
 					break;
 			}
 		}
