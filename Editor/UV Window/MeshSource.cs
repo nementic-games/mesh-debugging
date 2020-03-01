@@ -1,7 +1,7 @@
 ﻿// Copyright (c) 2019 Nementic Games GmbH. All Rights Reserved.
 // Author: Chris Yarbrough
 
-namespace Nementic.MeshDebugging
+namespace Nementic.MeshDebugging.UV
 {
     using UnityEditor;
     using UnityEngine;

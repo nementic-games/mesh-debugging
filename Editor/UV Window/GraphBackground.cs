@@ -2,7 +2,7 @@
 // Author: Chris Yarbrough
 
 #if UNITY_EDITOR
-namespace Nementic.MeshDebugging
+namespace Nementic.MeshDebugging.UV
 {
     using UnityEditor;
     using UnityEngine;
