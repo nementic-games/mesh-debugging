@@ -15,5 +15,8 @@
     "email": "mail@nementic.games",
     "url": "http://www.nementic.games"
   },
-  "type": "tool"
+  "type": "tool",
+  "dependencies": {
+    "com.unity.settings-manager": "1.0.1"
+  }
 }
