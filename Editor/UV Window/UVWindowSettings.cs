@@ -146,7 +146,7 @@ namespace Nementic.MeshDebugging.UV
 		private static void ColorDefaults(string searchContext)
 		{
 			EditorGUI.BeginChangeCheck();
-			EditorGUILayout.Space(2f);
+			GUILayout.Space(2f);
 			colorList.DoLayoutList();
 			SettingsGUILayout.DoResetContextMenuForLastRect(uvColorDefaults);
 			if (EditorGUI.EndChangeCheck())

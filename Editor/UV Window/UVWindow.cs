@@ -4,7 +4,6 @@
 #if UNITY_EDITOR
 namespace Nementic.MeshDebugging.UV
 {
-	using System;
 	using System.Collections.Generic;
 	using System.Linq;
 	using UnityEditor;
@@ -62,9 +61,12 @@ namespace Nementic.MeshDebugging.UV
 			selectionManager.OnEnable(this);
 			OnSelectionChange();
 			EditorApplication.hierarchyChanged += OnSelectionChange;
+#if UNITY_2020_2_OR_NEWER
 			ObjectChangeEvents.changesPublished += OnChangesPublished;
+#endif
 		}
 
+#if UNITY_2020_2_OR_NEWER
 		private void OnChangesPublished(ref ObjectChangeEventStream stream)
 		{
 			for (int i = 0; i < stream.length; i++)
@@ -80,10 +82,13 @@ namespace Nementic.MeshDebugging.UV
 				}
 			}
 		}
+#endif
 
 		private void OnDisable()
 		{
+#if UNITY_2020_2_OR_NEWER
 			ObjectChangeEvents.changesPublished -= OnChangesPublished;
+#endif
 			EditorApplication.hierarchyChanged -= OnSelectionChange;
 		}
 
