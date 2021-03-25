@@ -5,8 +5,10 @@
 namespace Nementic.MeshDebugging.UV
 {
 	using System.Collections.Generic;
+	using System.Linq;
 	using UnityEditor;
 	using UnityEngine;
+	using Object = UnityEngine.Object;
 
 	public class UVWindow : EditorWindow
 	{
@@ -25,63 +27,85 @@ namespace Nementic.MeshDebugging.UV
 			return window;
 		}
 
+		public void Inspect(GameObject gameObject)
+		{
+			selectionManager.Refresh(new[] { gameObject });
+		}
+
 #pragma warning disable 0649
 		[SerializeField]
 		private Texture2D icon;
 #pragma warning restore 0649
 
-		public Mesh Mesh
-		{
-			get { return meshSource.Mesh; }
-			set { meshSource.Mesh = value; }
-		}
+		[SerializeField]
+		private SelectionManager selectionManager = new SelectionManager();
 
-		private MeshSource meshSource;
-		private bool needsMeshRefresh;
-		private readonly List<Vector2> uvBuffer = new List<Vector2>(64);
-		private readonly List<int> triangleBuffer = new List<int>(32);
+		[SerializeField]
+		private OptionsPanel optionsPanel = new OptionsPanel();
 
 		private bool scheduleFocusView;
 		private Vector2 origin;
 		private float zoom = 1f;
-		private bool validDragStarted = false;
-		private static readonly float unitPixelSize = 300f;
-
-		private Options options = new Options();
+		private bool validDragStarted;
 		private bool optionsPanelSizeSet;
 		private Rect optionsRect;
-
 		private GUIStyle toolbarButtonStyle;
+
+		private const float unitPixelSize = 300f;
+		private readonly List<Vector2> uvBuffer = new List<Vector2>(64);
+		private readonly List<int> triangleBuffer = new List<int>(32);
 
 		private void OnEnable()
 		{
-			if (meshSource == null)
-				meshSource = new MeshSource(this);
-
 			base.wantsMouseMove = true;
-			options.OnEnable();
-			needsMeshRefresh = true;
+			selectionManager.OnEnable(this);
+			OnSelectionChange();
+			EditorApplication.hierarchyChanged += OnSelectionChange;
+#if UNITY_2020_2_OR_NEWER
+			ObjectChangeEvents.changesPublished += OnChangesPublished;
+#endif
 		}
+
+#if UNITY_2020_2_OR_NEWER
+		private void OnChangesPublished(ref ObjectChangeEventStream stream)
+		{
+			for (int i = 0; i < stream.length; i++)
+			{
+				if (stream.GetEventType(i) == ObjectChangeKind.ChangeAssetObjectProperties)
+				{
+					stream.GetChangeAssetObjectPropertiesEvent(i,
+						out ChangeAssetObjectPropertiesEventArgs data);
+
+					Object target = EditorUtility.InstanceIDToObject(data.instanceId);
+					if (target is Material)
+						OnSelectionChange();
+				}
+			}
+		}
+#endif
 
 		private void OnDisable()
 		{
-			options.OnDisable();
+#if UNITY_2020_2_OR_NEWER
+			ObjectChangeEvents.changesPublished -= OnChangesPublished;
+#endif
+			EditorApplication.hierarchyChanged -= OnSelectionChange;
+		}
+
+		private void OnDestroy()
+		{
+			if (selectionManager != null)
+				selectionManager.OnDestroy();
 		}
 
 		private void OnSelectionChange()
 		{
-			meshSource.Refresh();
+			selectionManager.Refresh(Selection.gameObjects);
 			Repaint();
 		}
 
 		private void OnGUI()
 		{
-			if (needsMeshRefresh)
-			{
-				meshSource.Refresh();
-				needsMeshRefresh = false;
-			}
-
 			if (scheduleFocusView)
 			{
 				FocusView();
@@ -89,47 +113,65 @@ namespace Nementic.MeshDebugging.UV
 			}
 
 			Rect toolbarRect = new Rect(-1, 0, position.width, 20);
-			Toolbar(toolbarRect, meshSource);
+			Toolbar(toolbarRect, selectionManager);
 
-			Rect graphWindowRect = new Rect(0, toolbarRect.yMax + 1, position.width, position.height - toolbarRect.height - 2);
+			Rect graphWindowRect = new Rect(0, toolbarRect.yMax + 1, position.width,
+				position.height - toolbarRect.height - 2);
 
 			if (UVWindowSettings.showOptions.value == true)
 			{
 				if (optionsPanelSizeSet == false)
 				{
-					options.normalizedPosition = (EditorGUIUtility.currentViewWidth - 230) / EditorGUIUtility.currentViewWidth;
+					optionsPanel.normalizedPosition = (EditorGUIUtility.currentViewWidth - 230) /
+					                                  EditorGUIUtility.currentViewWidth;
 					optionsPanelSizeSet = true;
 				}
 
-				optionsRect = new Rect(OptionsPanelPosition, toolbarRect.yMax, EditorGUIUtility.currentViewWidth - OptionsPanelPosition, graphWindowRect.height);
+				optionsRect = new Rect(OptionsPanelPosition, toolbarRect.yMax,
+					EditorGUIUtility.currentViewWidth - OptionsPanelPosition, graphWindowRect.height);
 				graphWindowRect.xMax = optionsRect.xMin;
 
-				options.Draw(optionsRect, meshSource, uvBuffer, this);
+				optionsPanel.Draw(optionsRect, selectionManager.Meshes, uvBuffer, this);
 			}
 
 			HandlesMouseEvents(new Vector2(0f, -toolbarRect.height), unitPixelSize, graphWindowRect);
-			GraphArea(graphWindowRect, unitPixelSize, meshSource);
+			GraphArea(graphWindowRect, unitPixelSize, selectionManager.Meshes);
 		}
 
 		private float OptionsPanelPosition
 		{
-			get => Mathf.Clamp(options.normalizedPosition * EditorGUIUtility.currentViewWidth, 50, EditorGUIUtility.currentViewWidth - 150);
+			get => Mathf.Clamp(optionsPanel.normalizedPosition * EditorGUIUtility.currentViewWidth, 50,
+				EditorGUIUtility.currentViewWidth - 150);
 		}
 
-		private void Toolbar(Rect toolbarRect, MeshSource meshSource)
+		private void Toolbar(Rect toolbarRect, SelectionManager selectionManager)
 		{
 			GUILayout.BeginArea(toolbarRect, EditorStyles.toolbar);
 			GUILayout.BeginHorizontal();
 
-			meshSource.DrawOptionPicker();
+			selectionManager.DrawInfoLabel();
 			GUILayout.FlexibleSpace();
 
 			InitializeStyles();
 
-			if (GUILayout.Button("Focus", toolbarButtonStyle, GUILayout.Width(50)))
+			bool hide = selectionManager.Meshes.Any(x => x.TextureAlpha > 0.01f);
+			string label = hide ? "Hide Textures" : "Show Textures";
+			if (GUILayout.Button(label, toolbarButtonStyle, GUILayout.Width(100)))
+				SetAllTexturesVisibility(hide);
+
+			if (GUILayout.Button("Center View", toolbarButtonStyle, GUILayout.Width(80)))
 				FocusView();
 
-			UVWindowSettings.showOptions.value = GUILayout.Toggle(UVWindowSettings.showOptions, "Options", EditorStyles.toolbarButton);
+			GUILayout.Space(10f);
+
+			EditorGUI.BeginChangeCheck();
+			UVWindowSettings.searchChildren.value = GUILayout.Toggle(UVWindowSettings.searchChildren,
+				"Include Children", EditorStyles.toolbarButton);
+			if (EditorGUI.EndChangeCheck())
+				OnSelectionChange();
+
+			UVWindowSettings.showOptions.value = GUILayout.Toggle(UVWindowSettings.showOptions,
+				"Display Options", EditorStyles.toolbarButton);
 
 			GUILayout.Space(4);
 
@@ -137,7 +179,14 @@ namespace Nementic.MeshDebugging.UV
 			GUILayout.EndArea();
 		}
 
-		private void GraphArea(Rect graphWindowRect, float unitPixelSize, Mesh mesh)
+		private void SetAllTexturesVisibility(bool hide)
+		{
+			foreach (var m in selectionManager.Meshes)
+				m.TextureAlpha = hide ? 0f : 1f;
+		}
+
+		private void GraphArea(Rect graphWindowRect, float unitPixelSize,
+			IEnumerable<SelectedMesh> meshTargets)
 		{
 			if (Event.current.type != EventType.Repaint)
 				return;
@@ -155,7 +204,20 @@ namespace Nementic.MeshDebugging.UV
 			Handles.color = Color.gray;
 			Handles.DotHandleCap(0, origin, Quaternion.identity, 2.5f, EventType.Repaint);
 
-			DrawUVs(mesh, origin, zoomedPixelSize);
+			// Draw textures first and overlay UVs on top
+			// to support comparing UVs from different meshes
+			// while checking against a common texture atlas.
+			foreach (SelectedMesh meshTarget in meshTargets)
+			{
+				if (meshTarget != null)
+					DrawTexture(meshTarget, origin, zoomedPixelSize);
+			}
+
+			foreach (SelectedMesh meshTarget in meshTargets)
+			{
+				if (meshTarget != null)
+					DrawUVs(meshTarget, origin, zoomedPixelSize);
+			}
 
 			GUI.EndClip();
 		}
@@ -220,31 +282,59 @@ namespace Nementic.MeshDebugging.UV
 			{
 				if (optionsPanelSizeSet == false)
 				{
-					options.normalizedPosition = (EditorGUIUtility.currentViewWidth - 230) / EditorGUIUtility.currentViewWidth;
+					optionsPanel.normalizedPosition = (EditorGUIUtility.currentViewWidth - 230) /
+					                                  EditorGUIUtility.currentViewWidth;
 					optionsPanelSizeSet = true;
 				}
 
-				var optionsRect = new Rect(OptionsPanelPosition, 0, EditorGUIUtility.currentViewWidth - OptionsPanelPosition, 0);
+				var optionsRect = new Rect(OptionsPanelPosition, 0,
+					EditorGUIUtility.currentViewWidth - OptionsPanelPosition, 0);
 				windowSize.x -= optionsRect.width;
 			}
 			Vector2 graphOrigin = windowSize * 0.5f;
 
-			Vector2 uvMapSize = CalculateUVBounds().size * 0.5f * unitPixelSize;
+			Rect bounds = new Rect();
+
+			foreach (var target in selectionManager.Meshes)
+			{
+				Rect rect = CalculateUVBounds(target);
+				RectUnion(ref rect, ref bounds, out bounds);
+			}
+
+			Vector2 uvMapSize = bounds.size * 0.5f * unitPixelSize;
 			uvMapSize.y *= -1f;
 			origin = graphOrigin - uvMapSize;
 			zoom = 1f;
 			Repaint();
 		}
 
-		private void DrawUVs(Mesh mesh, Vector2 position, float scale)
+		public static void RectUnion(ref Rect RA, ref Rect RB, out Rect RUnion)
 		{
+			RUnion = new Rect();
+			RUnion.min = Vector2.Min(RA.min, RB.min);
+			RUnion.max = Vector2.Max(RA.max, RB.max);
+		}
+
+		private void DrawTexture(SelectedMesh selectedMesh, Vector2 position, float scale)
+		{
+			if (selectedMesh.TryGetMaterial(out Material material))
+				selectedMesh.DrawPreviewTexture(material, position, scale);
+		}
+
+		private void DrawUVs(SelectedMesh selectedMesh, Vector2 position, float scale)
+		{
+			Mesh mesh = selectedMesh.Mesh;
+
 			if (mesh == null)
 				return;
 
 			if (mesh.vertexCount == 0)
 				return;
 
-			mesh.GetUVs((int)options.uvChannel, uvBuffer);
+			if (selectedMesh.uvChannel == UVChannel.None)
+				return;
+
+			mesh.GetUVs((int)selectedMesh.uvChannel, uvBuffer);
 
 			if (uvBuffer.Count == 0)
 				return;
@@ -254,19 +344,13 @@ namespace Nementic.MeshDebugging.UV
 			if (triangleBuffer.Count == 0)
 				return;
 
-			// TODO: Ensure preview is drawn behind labels.
-			if (this.meshSource.HasMaterial)
-			{
-				options.DrawPreviewTexture(this.meshSource.Material, position, scale);
-			}
-
 			position.y = -position.y;
 
 			GraphBackground.ApplyWireMaterial();
 			GL.PushMatrix();
 			GL.Begin(GL.LINES);
 
-			GL.Color(UVWindowSettings.UVColorWithAlpha);
+			GL.Color(selectedMesh.UVColorWithAlpha);
 
 			for (int i = 0; i < triangleBuffer.Count; i += 3)
 			{
@@ -290,12 +374,12 @@ namespace Nementic.MeshDebugging.UV
 			GL.PopMatrix();
 		}
 
-		private Rect CalculateUVBounds()
+		private Rect CalculateUVBounds(SelectedMesh selectedMesh)
 		{
 			Rect bounds = new Rect();
 
-			if (uvBuffer.Count == 0 && this.Mesh != null)
-				this.Mesh.GetUVs((int)options.uvChannel, uvBuffer);
+			if (uvBuffer.Count == 0 && selectedMesh.Mesh != null)
+				selectedMesh.Mesh.GetUVs((int)selectedMesh.uvChannel, uvBuffer);
 
 			if (uvBuffer.Count > 0)
 			{
