@@ -9,6 +9,8 @@ A dedicated editor window to visualize UVs and textures of selected meshes in th
 
 ![Preview: Window to show mesh UVs](Documentation~/Preview.png "The UV Window visualizes mesh UVs.")
 
+Inspecting multiple GameObjects is supported:
+
 ![Preview: Window to inspect multiple GameObjects](Documentation~/MultipleMeshes.png "The UV Window visualizes mesh UVs of multiple selected GameObjects.")
 
 ### Mesh Info
