@@ -1,7 +1,7 @@
 # Mesh Debugging
 
 ## Description
-A suite of utilities useful for finding issues or simply visualizing properties such as UVs or normals meshes.
+A suite of utilities useful for finding issues or simply visualizing properties such as UVs or normals of meshes.
 
 ### UV Window
 
@@ -15,11 +15,11 @@ Inspecting multiple GameObjects is supported:
 
 ### Mesh Info
 
-A tool to draw Gizmos in the SceneView which indicate mesh normals and list basic statistics such as vertex count.
+A tool to draw Gizmos in the SceneView which indicate mesh normals and also lists basic statistics such as vertex count.
 
 ### Scene View Shading
 
-Chose from a set of shaders to color objects in the scene to debug mesh properties such as vertex colors, local normals or UVs.
+Choose from a set of shaders to color objects in the scene to debug mesh properties such as vertex colors, local normals or UVs.
 
 ### Compatibility
 
